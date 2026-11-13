@@ -1,0 +1,57 @@
+{
+  "name": "procedural-bot-animations",
+  "version": "0.1.0",
+  "description": "Procedural motion and a state machine for Open Bot Avatar: idle wander, breathing, spring bounce, velocity lean, and typed bot states.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "keywords": [
+    "avatar",
+    "bot",
+    "mascot",
+    "procedural-animation",
+    "state-machine",
+    "open-bot-avatar"
+  ],
+  "license": "MIT",
+  "author": "Jp-mainieri",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jp-mainieri/procedural-bot-animations.git"
+  },
+  "homepage": "https://github.com/Jp-mainieri/procedural-bot-animations",
+  "peerDependencies": {
+    "open-bot-avatar": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "open-bot-avatar": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
