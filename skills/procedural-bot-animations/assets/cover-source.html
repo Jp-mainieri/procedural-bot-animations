@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body {
+    margin: 0;
+    width: 900px;
+    height: 320px;
+    background: #f6f2ec;
+    font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  .stage {
+    width: 900px;
+    height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 60px;
+  }
+  .slot { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .slot .bot { width: 170px; height: 170px; }
+  .slot .caption { color: #8a8378; letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="slot"><svg class="bot" id="bot-calm" viewBox="190 60 880 990"></svg><div class="caption">calm &amp; wise</div></div>
+    <div class="slot"><svg class="bot" id="bot-eager" viewBox="190 60 880 990"></svg><div class="caption">eager &amp; jittery</div></div>
+    <div class="slot"><svg class="bot" id="bot-heavy" viewBox="190 60 880 990"></svg><div class="caption">heavy &amp; big</div></div>
+  </div>
+
+<script type="module">
+  // Three Berrys — same exact rig and physics (DevBerry's lib/berry, ported in berry-live.js),
+  // each tuned with a different personality from the motion cookbook's calibration table.
+  import { mountBerry } from "../../../examples/berry-live/berry-live.js";
+
+  const calm = mountBerry(document.getElementById("bot-calm"), {
+    color: "#5b7a6b",
+    interactive: false,
+    idleAmpDeg: 1.6,
+    leafSpringK: 70,
+    leafSpringC: 9,
+    gazeRate: 5,
+    breatheFreq: 1.1,
+    wanderIntervalSeconds: [2.2, 4],
+  });
+  calm.start();
+  setInterval(() => calm.react("flatten"), 4200);
+
+  const eager = mountBerry(document.getElementById("bot-eager"), {
+    color: "#ff6a1a",
+    interactive: false,
+    idleAmpDeg: 3.6,
+    leafSpringK: 200,
+    leafSpringC: 14,
+    gazeRate: 14,
+    breatheFreq: 2.4,
+    wanderIntervalSeconds: [0.6, 1.3],
+  });
+  eager.start();
+  setInterval(() => eager.react("wink"), 1500);
+
+  const heavy = mountBerry(document.getElementById("bot-heavy"), {
+    color: "#3b6ea5",
+    interactive: false,
+    idleAmpDeg: 1.2,
+    leafSpringK: 90,
+    leafSpringC: 13,
+    gazeRate: 6,
+    breatheFreq: 0.9,
+    wanderIntervalSeconds: [1.8, 3.2],
+  });
+  heavy.start();
+  setInterval(() => heavy.react("somersault"), 2800);
+
+  window.__coverReady = true;
+</script>
+</body>
+</html>

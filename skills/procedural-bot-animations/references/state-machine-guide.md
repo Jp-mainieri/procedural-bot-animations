@@ -1,6 +1,6 @@
 # State machine guide
 
-`createStateMachine` (`src/state-machine.ts`) is a small, generic, renderer-agnostic FSM. It doesn't know about avatars at all — `bindBotStateMachine` is what connects a state to a mood/motion preset. This doc is about designing the states themselves.
+`createStateMachine` (`src/state-machine.ts`) is a small, generic, renderer-agnostic FSM. It doesn't know about avatars, moods or reactions at all — you connect a state to the engine yourself, typically in `onEnter`/`subscribe`, by calling `brain.setMood({...})` and/or `brain.react("...")`. This doc is about designing the states themselves.
 
 ## Anatomy
 
@@ -36,15 +36,15 @@ machine.subscribe((s, prev) => { /* ... */ });
 
 **Chat assistant waiting for a model response**
 States: `idle → thinking (on "ask") → success/error (on "resolve"/"fail") → idle (after a short delay or on "reset")`.
-`thinking` gets `freezeGaze: true` and a slight downward `viewOffset` (looking at the input, not wandering). `success` gets `bounceOnEnter: true` and a 1.5-2 s `after` back to `idle`. `error` is `interruptibleBy: ["idle"]` so a stray click doesn't erase it before the user reads the message.
+`thinking`'s `onEnter` calls `brain.setMood({ focused: 1 })` (looking at the input, not wandering — pair with a `getGazeTarget` that returns a fixed point while this state is active). `success`'s `onEnter` calls `brain.setMood({ proud: 1 })` and `brain.react("bounce")`, with a 1.5-2s `after` back to `idle` (whose `onEnter` zeroes every mood weight back out — see the cookbook's note on `setMood` merging, not replacing). `error` is `interruptibleBy: ["idle"]` so a stray click doesn't erase it before the user reads the message.
 
 **Form submission**
 States: `idle → loading (on "submit") → success/error (on the request's result) → idle`.
-`loading` is a good candidate for a rhythmic bob rather than bounce — drive `view.pitch` with a plain `sin(t * 2)` in your `StatePreset`-adjacent code, or extend `bindBotStateMachine`'s preset shape if you need more than mood/bounce/gaze/viewOffset per state.
+`loading` is a good candidate for a mood (e.g. `focused`) plus periodic `brain.react("bounce")` on a short interval, rather than a one-off reaction — call `setInterval`/`clearInterval` in `onEnter`/`onExit`.
 
 **Background job with progress**
 If you need intermediate states (`queued`, `running`, `retrying`, `done`, `failed`), model them as their own states rather than overloading `loading` with a payload — the FSM is cheap, and `subscribe` lets your UI (a status line, a toast) react the same way the avatar does, from one source of truth.
 
 ## When not to reach for a full FSM
 
-A single boolean ("isLoading") or a 3-way enum your framework already models doesn't need `createStateMachine` wrapped around it — call `bindBotStateMachine` with `presets` keyed by your existing enum. Reach for the FSM when you have more than ~4 states, timers, or rules about what can interrupt what; those are the things a plain enum won't enforce for you.
+A single boolean ("isLoading") or a 3-way enum your framework already models doesn't need `createStateMachine` wrapped around it — just call `brain.setMood`/`brain.react` directly from wherever that state changes. Reach for the FSM when you have more than ~4 states, timers, or rules about what can interrupt what; those are the things a plain enum won't enforce for you.

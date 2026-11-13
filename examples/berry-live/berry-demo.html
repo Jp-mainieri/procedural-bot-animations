@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Berry — faithful port (DevBerry)</title>
+<style>
+  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1b1b1b; --muted: #6b6b6b; --border: #e4e1da; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #15161a; --panel: #1d1f24; --ink: #eceae6; --muted: #9a9a9a; --border: #30323a; }
+  }
+  :root[data-theme="dark"] { --bg: #15161a; --panel: #1d1f24; --ink: #eceae6; --muted: #9a9a9a; --border: #30323a; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 32px 16px 64px;
+  }
+  h1 { font-size: 18px; margin: 0; }
+  p.sub { color: var(--muted); margin: 0; text-align: center; max-width: 34em; }
+  .stage {
+    width: 260px; height: 260px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 16px; cursor: pointer;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  button {
+    font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--ink);
+    border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: #e11d2e; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; max-width: 34em; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+  <h1>Berry — faithful engine port</h1>
+  <p class="sub">
+    DevBerry's actual mascot: the exact body + 3 leaves geometry, the exact spring/leaf-bend physics, and three of
+    its real keyframed reactions, from <code>lib/berry/{rig,motor,folhas,reacoes}.ts</code> (branch
+    <code>feat/berry-simulador-mascote</code>), translated to English identifiers but otherwise unchanged. Move your
+    pointer over it; click or tap to jump, or use the buttons below.
+  </p>
+  <svg id="stage" class="stage" viewBox="190 60 880 990"></svg>
+  <div class="controls">
+    <button data-reaction="wink">wink</button>
+    <button data-reaction="flatten">flatten</button>
+    <button data-reaction="somersault">somersault</button>
+  </div>
+  <footer>
+    This file is a reference demo, not part of the installable <code>procedural-bot-animations</code> package —
+    Berry has a multi-part rig (leaves with their own spring physics), which is a different shape than the
+    single-silhouette avatars that package's generic engine targets. See
+    <a href="https://github.com/Jp-mainieri/procedural-bot-animations/blob/main/skills/procedural-bot-animations/references/berry-case-study.md">berry-case-study.md</a>.
+  </footer>
+
+<script type="module">
+  import { mountBerry } from "./berry-live.js";
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const svg = document.getElementById("stage");
+  const berry = mountBerry(svg, { reducedMotion });
+  berry.start();
+
+  for (const button of document.querySelectorAll("button[data-reaction]")) {
+    button.addEventListener("click", () => berry.react(button.dataset.reaction));
+  }
+</script>
+</body>
+</html>

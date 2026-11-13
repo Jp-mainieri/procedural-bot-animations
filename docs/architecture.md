@@ -1,38 +1,45 @@
 # Architecture
 
-Three layers, each owned by a different piece:
-
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ Your app                                                 │
-│ decides WHEN things happen: machine.send("ask"), etc.    │
+│ decides WHEN things happen: machine.send("ask"),         │
+│ brain.setMood({...}), brain.react("bounce")              │
 ├─────────────────────────────────────────────────────────┤
-│ procedural-bot-animations (this repo)                    │
-│ state-machine.ts   — states, transitions, timers         │
-│ motion.ts          — spring/damp-driven idle, gaze,      │
-│                       breathing, bounce, lean            │
-│ bind.ts            — ties the above to an avatar's       │
-│                       update() + a host element's        │
-│                       CSS transform, every frame         │
-│ scroll-traveler.ts — optional: position along scroll     │
+│ procedural-bot-animations (this repo, src/)              │
+│ render.ts   — mounts a definition as THIS package's own  │
+│               SVG: one body path, two independently      │
+│               posable eye groups                         │
+│ moods.ts    — weighted/blended named moods                │
+│ reactions.ts— one-shot closed-form curves, priority queue │
+│ gaze.ts     — pursuit/saccade/microsaccade, autonomous    │
+│               wander                                      │
+│ fake3d.ts   — flat-silhouette "head turn" illusion         │
+│ blink.ts    — this engine's own blink scheduler            │
+│ brain.ts    — composes all of the above into one Pose      │
+│               per frame; pure, no DOM                      │
+│ bind.ts     — the rAF/DOM loop: Brain + render.ts           │
+│ state-machine.ts, scroll-traveler.ts — generic, DOM-free     │
 ├─────────────────────────────────────────────────────────┤
-│ open-bot-avatar (github.com/DominikScholz/open-bot-avatar)│
-│ a JSON shape (silhouette + eyes) + a renderer that can   │
-│ be told a mood, a gaze target, a depth and a view angle  │
+│ A definition: { body: { path }, eyes: {x,y,spacing,scale} }│
+│ Get one from Open Bot Avatar's editor/skill, hand-write    │
+│ one, or generate it any other way. Open Bot Avatar's own    │
+│ renderer/runtime is never called by this package.           │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Why a separate repo instead of a fork
+## Why render the shape ourselves instead of using Open Bot Avatar's renderer
 
-Open Bot Avatar is deliberately dependency-free and scoped to shape + rendering; it is not trying to be a behavior engine, and its own docs point at exactly this gap ("The runtime controls color, inferred volume, view, gaze, blinking and animation" — but *driving* those values over time, in response to app state, is left to the consumer). This repo is that consumer-side piece, kept separate so:
+Open Bot Avatar's own `mountAvatar`/`update()` exposes three things: `mood` (a 3-string enum), `lookAt`, and `depth`/`view`. That's deliberately minimal — it's a renderer, not a behavior engine — but it means moods can't blend, there's no reaction system, and nothing can deform the eyes beyond what its own internal animator does.
 
-- It can version independently and depend on Open Bot Avatar as an **optional peer**, not a hard dependency — `state-machine.ts` and `spring.ts`/`motion.ts`'s math have no idea what an avatar even is.
-- `bind.ts` only needs a duck-typed `{ update(options) }` shape (see `UpdatableAvatar` in `src/bind.ts`), so a renderer other than Open Bot Avatar's — a custom SVG rig, a Lottie wrapper exposing similar knobs — can reuse the state machine and motion math too.
+`src/render.ts` instead draws the body path and two eye groups directly, each a plain SVG element this package fully controls (position, scale, rotation, a pill↔arc crossfade for "happy"). That's what makes `moods.ts`'s weighted blending and `reactions.ts`'s per-eye/per-body deltas possible at all — they're just numbers added onto a `Pose`, applied straight to real SVG attributes every frame.
 
-## Why the motion operates on four numbers instead of a rig
+## Why Berry (`examples/berry-live/`) isn't part of the package
 
-Open Bot Avatar's definitions are one silhouette path with no bones, joints or named parts — there's nothing to rig. The "aliveness" has to come entirely from what the renderer does expose: `mood`, `lookAt`, `depth`, `view`, plus whatever the *host element* can do in CSS (scale, rotate, translate). `motion.ts` and `bind.ts` are built against exactly that surface — see `skills/procedural-bot-animations/references/motion-cookbook.md` for how each behavior maps onto it.
+Berry's rig has three leaves, each an independent two-link spring chain (see [`berry-case-study.md`](../skills/procedural-bot-animations/references/berry-case-study.md)) — fundamentally more than "one silhouette, two eyes." Bending that into the single-silhouette `src/` API would mean inventing a different, incompatible shape of API just to accommodate one character. Instead, Berry gets its own small, honest, faithfully-ported module that reuses nothing from `src/` and claims nothing it doesn't do.
 
-## Extending to a different avatar renderer
+If your own character has separate moving parts, copy `berry-live.js`'s pattern (described in the case study) rather than trying to force it through `src/`.
 
-Implement `UpdatableAvatar` (one `update()` method) around your renderer, and reuse everything else unchanged: `createStateMachine`, `GazeController`, `Bounce`, `breathingDepth`, `neverRepeating`, `travelerFrame`. Only `bindBotStateMachine`'s specific choice of which numbers go into `avatar.update(...)` is Open-Bot-Avatar-shaped; it's a small function, read it before assuming you need to fork it.
+## Extending to a different single-silhouette renderer
+
+`Brain` (`brain.ts`) is pure and DOM-free: `brain.update(dt, gazeTarget)` returns a `Pose` and nothing else. `bindBrain` is a thin convenience that owns a `requestAnimationFrame` loop, a `Brain`, and a `MountedRig` from `mountRig`, applying one to the other every frame. If you want a different rendering strategy for the same `Pose` data (canvas instead of SVG, for instance), write your own small loop calling `brain.update()` directly and apply the `Pose` however you like — `MountedRig`'s shape (`{ bounds, applyPose(pose), destroy() }`) is a reasonable one to copy, but `bindBrain` itself isn't pluggable; it's meant to be read and forked for this case, not configured.

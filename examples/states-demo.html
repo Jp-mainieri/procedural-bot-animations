@@ -49,7 +49,7 @@
 
   .stage {
     width: 100%;
-    max-width: 420px;
+    max-width: 460px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -59,33 +59,29 @@
     align-items: center;
     gap: 16px;
   }
-  #bot-host { width: 140px; aspect-ratio: 1; }
-  .state-label {
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
+  #bot-host { width: 160px; aspect-ratio: 1; cursor: default; }
+  .state-label { font-weight: 600; letter-spacing: 0.02em; }
 
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-  }
+  .group { width: 100%; }
+  .group h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
   button {
     font: inherit;
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--ink);
     border-radius: 999px;
-    padding: 8px 14px;
+    padding: 7px 13px;
     cursor: pointer;
+    font-size: 13px;
   }
   button:hover { border-color: var(--accent); }
   button[data-primary] { background: var(--accent); color: #fff; border-color: transparent; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
   .log {
     width: 100%;
-    max-width: 420px;
+    max-width: 460px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -97,35 +93,37 @@
   }
   .log div:first-child { color: var(--ink); }
 
-  footer {
-    color: var(--muted);
-    font-size: 12px;
-    text-align: center;
-    max-width: 36em;
-  }
+  footer { color: var(--muted); font-size: 12px; text-align: center; max-width: 36em; }
   footer a { color: inherit; }
 </style>
 </head>
 <body>
   <h1>procedural-bot-animations</h1>
   <p class="sub">
-    An <a href="https://github.com/DominikScholz/open-bot-avatar" target="_blank" rel="noopener">Open Bot Avatar</a>
-    driven by this repo's state machine + motion library. Fire events below; the avatar reacts and (except for
-    <code>error</code>) settles back to idle on its own.
+    A silhouette-plus-eyes definition rendered and driven entirely by this repo's own engine — weighted moods,
+    one-shot reactions, and gaze with saccade/pursuit physics. Move your pointer over the bot; mix moods and fire
+    reactions below. These shapes are Open Bot Avatar examples, used only as modeling input (see
+    <a href="berry-live/berry-demo.html">berry-live/berry-demo.html</a> for a faithful port of DevBerry's actual
+    multi-part Berry, leaves included, which this generic single-silhouette engine does not attempt to reproduce).
   </p>
 
   <div class="stage">
+    <div class="group">
+      <h2>Character</h2>
+      <div class="controls" id="character-buttons"></div>
+    </div>
+
     <div id="bot-host"></div>
-    <div class="state-label">state: <span id="state-name">idle</span></div>
-    <div class="controls">
-      <button data-primary data-event="ask">ask (idle → thinking)</button>
-      <button data-event="resolve">resolve (→ success)</button>
-      <button data-event="fail">fail (→ error)</button>
-      <button data-event="reset">reset (error → idle)</button>
-      <button data-event="startLoading">startLoading</button>
-      <button data-event="doneLoading">doneLoading</button>
-      <button data-event="sleep">sleep</button>
-      <button data-event="wake">wake</button>
+    <div class="state-label">reaction: <span id="reaction-name">none</span></div>
+
+    <div class="group">
+      <h2>Moods (toggle any combination)</h2>
+      <div class="controls" id="mood-buttons"></div>
+    </div>
+
+    <div class="group">
+      <h2>Reactions (one at a time, queued)</h2>
+      <div class="controls" id="reaction-buttons"></div>
     </div>
   </div>
 
@@ -134,56 +132,61 @@
   <footer>
     Vanilla JS + ES modules, no build step to view this file — open it through a local server (ES module imports
     need http, not <code>file://</code>), e.g. <code>npx serve .</code> from the repo root after
-    <code>npm run build</code>. Respects <code>prefers-reduced-motion</code>.
+    <code>npm run build</code>. Respects <code>prefers-reduced-motion</code> (mood/reaction changes still show; the
+    idle wander, breathing and blink loop stop).
   </footer>
 
 <script type="module">
-  import { mountAvatar } from "https://esm.sh/open-bot-avatar@0.2.1/dom";
+  // Open Bot Avatar is used here only as a *shape source* — `getExample` returns plain
+  // JSON (one silhouette path + eye placement), never its renderer or runtime.
   import { getExample } from "https://esm.sh/open-bot-avatar@0.2.1";
-  import { createStateMachine, bindBotStateMachine } from "../dist/index.js";
+  import { bindBrain, builtinMoods, builtinReactions } from "../dist/index.js";
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
   const host = document.getElementById("bot-host");
-  const avatar = mountAvatar(host, {
-    definition: getExample("mug"),
-    color: "#ff6a1a",
-    followPointer: !reducedMotion,
-    reducedMotion,
-  });
 
-  const machine = createStateMachine({
-    initial: "idle",
-    states: {
-      idle: { id: "idle" },
-      thinking: { id: "thinking" },
-      success: { id: "success", after: { ms: 1800, to: "idle" } },
-      error: { id: "error", interruptibleBy: ["idle"] },
-      loading: { id: "loading" },
-      sleeping: { id: "sleeping", interruptibleBy: ["idle"] },
-    },
-    transitions: [
-      { from: "idle", event: "ask", to: "thinking" },
-      { from: "thinking", event: "resolve", to: "success" },
-      { from: "thinking", event: "fail", to: "error" },
-      { from: "error", event: "reset", to: "idle" },
-      { from: "idle", event: "startLoading", to: "loading" },
-      { from: "loading", event: "doneLoading", to: "idle" },
-      { from: "*", event: "sleep", to: "sleeping" },
-      { from: "sleeping", event: "wake", to: "idle" },
-    ],
-  });
-
-  const presets = {
-    idle: { mood: "idle" },
-    thinking: { mood: "thinking", freezeGaze: true, viewOffset: { pitch: 0.08 } },
-    success: { mood: "happy", bounceOnEnter: true },
-    error: { mood: "idle", viewOffset: { pitch: -0.12 } },
-    loading: { mood: "thinking", freezeGaze: true },
-    sleeping: { mood: "idle", freezeGaze: true, baseDepth: 2 },
+  const characters = {
+    mug: { definition: getExample("mug"), color: "#ff6a1a" },
+    controller: { definition: getExample("controller"), color: "#5b7a6b" },
+    lightbulb: { definition: getExample("lightbulb"), color: "#3b6ea5" },
   };
 
-  const stateName = document.getElementById("state-name");
+  let pointer = null;
+  host.addEventListener("pointermove", (e) => {
+    const rect = host.getBoundingClientRect();
+    pointer = {
+      point: {
+        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        y: ((e.clientY - rect.top) / rect.height) * 2 - 1,
+      },
+      arrival: "pursuit",
+    };
+  });
+  host.addEventListener("pointerleave", () => { pointer = null; });
+
+  let bound = null;
+  function mount(characterName) {
+    bound?.destroy();
+    host.replaceChildren();
+    const { definition, color } = characters[characterName];
+    bound = bindBrain({ host, definition, color, getGazeTarget: () => (reducedMotion ? null : pointer) });
+    if (!reducedMotion) bound.start(); else bound.tick(performance.now());
+  }
+
+  const characterButtons = document.getElementById("character-buttons");
+  for (const name of Object.keys(characters)) {
+    const btn = document.createElement("button");
+    btn.textContent = name;
+    btn.setAttribute("aria-pressed", String(name === "mug"));
+    btn.addEventListener("click", () => {
+      for (const b of characterButtons.children) b.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-pressed", "true");
+      mount(name);
+      writeLog(`character → ${name}`);
+    });
+    characterButtons.appendChild(btn);
+  }
+
   const log = document.getElementById("log");
   function writeLog(entry) {
     const row = document.createElement("div");
@@ -191,43 +194,46 @@
     log.prepend(row);
   }
 
-  machine.subscribe((state, previous) => {
-    stateName.textContent = state;
-    writeLog(`${previous} → ${state}`);
-  });
-
-  let pointer = null;
-  host.addEventListener("pointermove", (e) => {
-    const rect = host.getBoundingClientRect();
-    pointer = {
-      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      y: ((e.clientY - rect.top) / rect.height) * 2 - 1,
-    };
-  });
-  host.addEventListener("pointerleave", () => { pointer = null; });
-
-  const bound = bindBotStateMachine({
-    avatar,
-    host,
-    machine,
-    presets,
-    getPointerTarget: () => (reducedMotion ? null : pointer),
-  });
-
-  if (!reducedMotion) {
-    bound.start();
-  } else {
-    // Still apply the discrete mood for the initial state; no continuous loop.
-    bound.tick(performance.now());
-  }
-
-  for (const button of document.querySelectorAll("button[data-event]")) {
-    button.addEventListener("click", () => {
-      const sent = machine.send(button.dataset.event);
-      if (!sent) writeLog(`(ignored) ${button.dataset.event}`);
+  // --- Mood toggles: any subset can be active at once, each a weight of 1 when on.
+  const moodButtons = document.getElementById("mood-buttons");
+  const activeMoods = new Set();
+  for (const name of Object.keys(builtinMoods)) {
+    if (name === "neutral") continue;
+    const btn = document.createElement("button");
+    btn.textContent = name;
+    btn.setAttribute("aria-pressed", "false");
+    btn.addEventListener("click", () => {
+      const nowOn = !activeMoods.has(name);
+      if (nowOn) activeMoods.add(name); else activeMoods.delete(name);
+      btn.setAttribute("aria-pressed", String(nowOn));
+      // Send every mood's weight explicitly (not just the active ones) — `setMood` merges
+      // into existing targets rather than replacing them, so a toggled-off mood needs an
+      // explicit 0 to actually fade out.
+      const weights = {};
+      for (const m of Object.keys(builtinMoods)) weights[m] = activeMoods.has(m) ? 1 : 0;
+      bound.brain.setMood(weights);
+      writeLog(`mood ${name} → ${nowOn ? "on" : "off"}`);
     });
+    moodButtons.appendChild(btn);
   }
 
+  // --- Reaction buttons.
+  const reactionButtons = document.getElementById("reaction-buttons");
+  const reactionName = document.getElementById("reaction-name");
+  for (const name of Object.keys(builtinReactions)) {
+    const btn = document.createElement("button");
+    if (name === "bounce") btn.setAttribute("data-primary", "");
+    btn.textContent = name;
+    btn.addEventListener("click", () => {
+      const started = bound.brain.react(name);
+      writeLog(started ? `reaction ${name} (started)` : `reaction ${name} (queued)`);
+    });
+    reactionButtons.appendChild(btn);
+  }
+
+  setInterval(() => { reactionName.textContent = bound?.brain.reactionPlayer.currentName ?? "none"; }, 100);
+
+  mount("mug");
   writeLog("ready");
 </script>
 </body>
