@@ -2,6 +2,16 @@ import type { AvatarDefinitionLike, EyePose, Pose } from "./types.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
+/**
+ * Formats a number for an SVG attribute. `${v}` alone fails for very small
+ * magnitudes (e.g. a gaze offset that's decayed to ~7e-7): `Number#toString`
+ * switches to exponential notation below 1e-6, which SVG's number grammar
+ * rejects in a `transform` — `toFixed` never does.
+ */
+function fmt(v: number): string {
+  return Number.isFinite(v) ? v.toFixed(4) : "0";
+}
+
 export interface RenderOptions {
   color?: string;
   eyeColor?: string;
@@ -55,7 +65,7 @@ function applyEyeTransform(group: SVGGElement, baseX: number, baseY: number, pos
   const sy = pose.scaleY * Math.max(openness, 0.04);
   group.setAttribute(
     "transform",
-    `translate(${baseX + pose.offsetX} ${baseY + pose.offsetY}) rotate(${pose.rotate}) scale(${sx} ${sy})`,
+    `translate(${fmt(baseX + pose.offsetX)} ${fmt(baseY + pose.offsetY)}) rotate(${fmt(pose.rotate)}) scale(${fmt(sx)} ${fmt(sy)})`,
   );
 }
 
@@ -116,7 +126,7 @@ export function mountRig(host: HTMLElement, definition: AvatarDefinitionLike, op
     const pivotY = bounds.y + bounds.height; // ground pivot: bottom of the silhouette
     bodyGroup.setAttribute(
       "transform",
-      `translate(${body.x} ${body.y}) translate(${pivotX} ${pivotY}) rotate(${body.rotate}) scale(${body.scaleX} ${body.scaleY}) translate(${-pivotX} ${-pivotY})`,
+      `translate(${fmt(body.x)} ${fmt(body.y)}) translate(${fmt(pivotX)} ${fmt(pivotY)}) rotate(${fmt(body.rotate)}) scale(${fmt(body.scaleX)} ${fmt(body.scaleY)}) translate(${fmt(-pivotX)} ${fmt(-pivotY)})`,
     );
 
     applyEyeTransform(left.group, leftBaseX, baseY, pose.leftEye);

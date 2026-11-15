@@ -1,42 +1,29 @@
 /**
- * Composes `berry-rig.js` + `berry-motor.js` + `berry-reactions.js` into a
- * running character, mounted onto an existing
- * `<svg viewBox="190 60 880 990">`. The idle/gaze/breathing/jump
- * orchestration below is this demo's own (DevBerry's real `cerebro.ts` also
- * wires in app-specific triggers — Piston results, Danki cards — that don't
- * apply to a generic public demo), but every primitive it calls (`spring`,
- * `stepTip`, `bendPath`, `stepJump`, the reaction tracks, ...) is exact
- * ported code. See `berry-case-study.md`.
+ * Mounts a real, running Berry: `berry-rig.js` (exact geometry) rendered as
+ * SVG, driven by `BerryBrain` (`berry-brain.js`, the ported `cerebro.ts`),
+ * with the page wiring (pointer, hover, click, focus/anchors via
+ * `berry-focus.js`) this demo owns. Not part of the installable
+ * `procedural-bot-animations` package — see `berry-case-study.md`.
  */
+import { BerryBrain } from "./berry-brain.js";
+import { decideGaze, newFocusState, observePage } from "./berry-focus.js";
+import { axisOf, bendPath, clamp, fmtNum as f, parsePath } from "./berry-motor.js";
 import { RIG_BERRY } from "./berry-rig.js";
-import { clamp, damp, spring, newBlink, stepBlink, atRest, launch, stepJump, axisOf, stepTip, parsePath, bendPath } from "./berry-motor.js";
-import { BerryReactionPlayer } from "./berry-reactions.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 export function mountBerry(svg, options = {}) {
-  const {
-    color = "#e11d2e",
-    eyeColor = "#1b1210",
-    interactive = true,
-    reducedMotion = false,
-    // Personality tuning — same rig, same physics, different parameters
-    // (see the motion cookbook's "personality → parameters" table).
-    idleAmpDeg = 2.4,
-    idleFreqA = 1.3,
-    idleFreqB = 2.1,
-    leafSpringK = 120,
-    leafSpringC = 11,
-    gazeRate = 9,
-    breatheFreq = 1.65,
-    wanderIntervalSeconds = [1.2, 3.8],
-  } = options;
+  const { color = "#e11d2e", eyeColor = "#1b1210", interactive = true, reducedMotion = false, gazeMode = "pointer" } = options;
 
-  // Outer group: reactions that spin around the body's *center* (e.g. a
-  // somersault) rotate this, separate from the inner group's ground-pivoted
-  // breathing/tilt/jump transform.
-  const spinGroup = document.createElementNS(SVG_NS, "g");
-  const bodyGroup = document.createElementNS(SVG_NS, "g");
+  const shadow = document.createElementNS(SVG_NS, "ellipse");
+  shadow.setAttribute("cx", String(RIG_BERRY.shadow.x));
+  shadow.setAttribute("cy", String(RIG_BERRY.shadow.y));
+  shadow.setAttribute("rx", String(RIG_BERRY.shadow.rx));
+  shadow.setAttribute("ry", String(RIG_BERRY.shadow.ry));
+  shadow.setAttribute("fill", "#000");
+
+  const spinGroup = document.createElementNS(SVG_NS, "g"); // reactions that spin around the body's center
+  const bodyGroup = document.createElementNS(SVG_NS, "g"); // ground-pivoted breathing/tilt/jump
   spinGroup.appendChild(bodyGroup);
 
   const bodyPath = document.createElementNS(SVG_NS, "path");
@@ -48,11 +35,6 @@ export function mountBerry(svg, options = {}) {
     rig: a,
     axis: axisOf(a),
     cmds: parsePath(a.path),
-    base: { a: 0, v: 0 },
-    tip: { a: 0, v: 0 },
-    prevBaseV: 0,
-    phase: Math.random() * Math.PI * 2,
-    side: a.role === "L" ? -1 : a.role === "R" ? 1 : 0,
     group: document.createElementNS(SVG_NS, "g"),
     path: document.createElementNS(SVG_NS, "path"),
   }));
@@ -65,7 +47,7 @@ export function mountBerry(svg, options = {}) {
   function makeEye(cx, cy) {
     const g = document.createElementNS(SVG_NS, "g");
     g.setAttribute("transform", `translate(${cx} ${cy})`);
-    const lid = document.createElementNS(SVG_NS, "g"); // scaled for blink/squash/lid-close
+    const lid = document.createElementNS(SVG_NS, "g");
     const { w, h } = RIG_BERRY.eyeShape;
     const pill = document.createElementNS(SVG_NS, "rect");
     pill.setAttribute("x", String(-w / 2));
@@ -74,7 +56,6 @@ export function mountBerry(svg, options = {}) {
     pill.setAttribute("height", String(h));
     pill.setAttribute("rx", String(w / 2));
     pill.setAttribute("fill", eyeColor);
-    // Happy arc (^), same footprint as the pill, crossfaded in via opacity.
     const arc = document.createElementNS(SVG_NS, "path");
     const aw = w / 2;
     arc.setAttribute("d", `M ${-aw} ${h * 0.16} Q 0 ${-h * 0.42} ${aw} ${h * 0.16} Q 0 ${-h * 0.08} ${-aw} ${h * 0.16} Z`);
@@ -82,132 +63,153 @@ export function mountBerry(svg, options = {}) {
     arc.setAttribute("opacity", "0");
     lid.append(pill, arc);
     g.appendChild(lid);
-    return { g, lid, pill, arc };
+    return { g, lid };
   }
-  const leftEye = makeEye(RIG_BERRY.eyes.left.x, RIG_BERRY.eyes.left.y);
-  const rightEye = makeEye(RIG_BERRY.eyes.right.x, RIG_BERRY.eyes.right.y);
-  // Eyes are children of `bodyGroup`, not siblings — they must inherit the
-  // body's jump/breathing/tilt transform (set on `bodyGroup` each frame
-  // below) or they visibly detach from the body during any of that motion.
-  bodyGroup.append(leftEye.g, rightEye.g);
-  svg.append(spinGroup);
+  const eyeLeft = makeEye(RIG_BERRY.eyes.left.x, RIG_BERRY.eyes.left.y);
+  const eyeRight = makeEye(RIG_BERRY.eyes.right.x, RIG_BERRY.eyes.right.y);
+  bodyGroup.append(eyeLeft.g, eyeRight.g);
 
-  let lookX = 0, lookY = 0;
-  let pointerTarget = null;
-  let idleSeconds = 0;
-  let wanderTarget = { x: 0, y: 0 };
-  let nextWanderAt = 0;
-  const jump = { y: 0, vy: 0 };
-  const squash = { s: 0, v: 0 };
-  let prevVy = 0;
-  const blink = newBlink(performance.now());
-  const reactions = new BerryReactionPlayer();
-  let lastMs = null;
+  // Simple text accessories (lamp/!/?/.../zzz) — a plain, honest stand-in for
+  // DevBerry's illustrated icons; see berry-case-study.md.
+  function makeAccessory(symbol, dx) {
+    const t = document.createElementNS(SVG_NS, "text");
+    t.textContent = symbol;
+    t.setAttribute("x", String(RIG_BERRY.center.x + dx));
+    t.setAttribute("y", "210");
+    t.setAttribute("font-size", "70");
+    t.setAttribute("font-family", "system-ui, sans-serif");
+    t.setAttribute("font-weight", "700");
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("fill", color);
+    t.setAttribute("opacity", "0");
+    bodyGroup.appendChild(t);
+    return t;
+  }
+  const accessories = {
+    exclaim: makeAccessory("!", 110),
+    question: makeAccessory("?", 110),
+    lamp: makeAccessory("\u{1F4A1}", -110),
+    ellipsis: makeAccessory("…", 0),
+    zzz: makeAccessory("z z z", 0),
+  };
+
+  svg.append(shadow, spinGroup);
+
+  const brain = new BerryBrain(performance.now());
+  const focus = newFocusState();
+  const stopObserving = interactive ? observePage() : () => {};
+
+  let pointer = null; // {x,y} in client px
+  let pointerInside = false;
+  let lastPointerMoveT = 0;
+  let hovering = false;
+  let mood = {};
+  let activity = null;
+  let bend = true;
 
   if (interactive) {
-    svg.addEventListener("pointermove", (e) => {
-      const rect = svg.getBoundingClientRect();
-      pointerTarget = { x: ((e.clientX - rect.left) / rect.width) * 2 - 1, y: ((e.clientY - rect.top) / rect.height) * 2 - 1 };
+    svg.addEventListener("pointerenter", () => {
+      hovering = true;
+      brain.hoverEnter(performance.now());
     });
-    svg.addEventListener("pointerleave", () => { pointerTarget = null; });
-    svg.addEventListener("pointerdown", () => launch(jump));
+    svg.addEventListener("pointerleave", () => { hovering = false; pointerInside = false; });
+    svg.addEventListener("pointermove", (e) => {
+      pointer = { x: e.clientX, y: e.clientY };
+      pointerInside = true;
+      lastPointerMoveT = performance.now();
+    });
+    svg.addEventListener("pointerdown", () => brain.tap(performance.now()));
   }
 
   function tick(nowMs) {
-    const dt = clamp(lastMs === null ? 16 : nowMs - lastMs, 0, 50) / 1000;
-    lastMs = nowMs;
-    const t = nowMs / 1000;
+    const rect = svg.getBoundingClientRect();
 
-    if (reducedMotion) {
-      bodyPath.setAttribute("d", RIG_BERRY.body);
-      return;
-    }
-
-    const r = reactions.update(dt) ?? {};
-
-    if (!(r.holdGaze > 0.5)) {
-      let target;
-      if (pointerTarget) {
-        idleSeconds = 0;
-        target = pointerTarget;
-      } else {
-        idleSeconds += dt;
-        nextWanderAt -= dt;
-        if (nextWanderAt <= 0) {
-          nextWanderAt = wanderIntervalSeconds[0] + Math.random() * (wanderIntervalSeconds[1] - wanderIntervalSeconds[0]);
-          wanderTarget = Math.random() < 0.3 ? { x: 0, y: 0 } : { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
-        }
-        target = idleSeconds > 2.5 ? wanderTarget : { x: 0, y: 0 };
+    let gazeInput = null;
+    let glideSeconds;
+    if (gazeMode === "pointer" && pointer) {
+      gazeInput = { x: clamp(((pointer.x - rect.left) / rect.width) * 2 - 1, -1, 1), y: clamp(((pointer.y - rect.top) / rect.height) * 2 - 1, -1, 1) };
+    } else if (gazeMode !== "pointer") {
+      const cursor = { x: pointer?.x ?? -9999, y: pointer?.y ?? -9999, last: lastPointerMoveT, inside: pointerInside };
+      const decision = decideGaze(focus, nowMs, Math.random, rect, cursor, gazeMode);
+      if (decision.point === "screen") gazeInput = { x: 0, y: -0.15 };
+      else if (decision.point) {
+        gazeInput = { x: clamp(((decision.point.x - rect.left) / rect.width) * 2 - 1, -1, 1), y: clamp(((decision.point.y - rect.top) / rect.height) * 2 - 1, -1, 1) };
       }
-      lookX = damp(lookX, target.x, gazeRate, dt);
-      lookY = damp(lookY, target.y, gazeRate, dt);
+      glideSeconds = decision.glide || undefined;
     }
 
-    // `turn` (giro): a reaction can slide the eyes toward a side independent of gaze.
-    const turn = r.turn ?? 0;
-    const eyeDx = lookX * 30 + turn * 20;
-    const eyeDy = lookY * 22 + (r.eyeY ?? 0);
-    leftEye.g.setAttribute("transform", `translate(${RIG_BERRY.eyes.left.x + eyeDx} ${RIG_BERRY.eyes.left.y + eyeDy})`);
-    rightEye.g.setAttribute("transform", `translate(${RIG_BERRY.eyes.right.x + eyeDx} ${RIG_BERRY.eyes.right.y + eyeDy})`);
+    const proximity = pointer ? clamp(1 - Math.hypot(pointer.x - (rect.left + rect.width / 2), pointer.y - (rect.top + rect.height / 2)) / (rect.width * 1.2), 0, 1) : 0;
 
-    stepJump(jump, squash, dt);
-    const dBodyVy = jump.vy - prevVy;
-    prevVy = jump.vy;
+    const pose = brain.step(nowMs, {
+      gaze: gazeInput,
+      hover: hovering,
+      reducedMotion,
+      mood,
+      activity,
+      detail: "full",
+      bend,
+      proximity,
+      glideSeconds,
+    });
 
-    const leafDeltaByRole = { C: r.leafC ?? 0, L: r.leafL ?? 0, R: r.leafR ?? 0 };
-    for (const leaf of leaves) {
-      const idleTarget = idleAmpDeg * ((Math.sin(t * idleFreqA + leaf.phase) + Math.sin(t * idleFreqB + leaf.phase * 1.7)) / 2);
-      spring(leaf.base, idleTarget, leafSpringK, leafSpringC, dt);
-      const dBaseVel = leaf.base.v - leaf.prevBaseV;
-      leaf.prevBaseV = leaf.base.v;
-      stepTip(leaf.tip, dBaseVel, dBodyVy, leaf.side, dt);
-      const total = leaf.base.a + leafDeltaByRole[leaf.rig.role];
-      leaf.group.setAttribute("transform", `rotate(${total} ${leaf.rig.pivot.x} ${leaf.rig.pivot.y})`);
-      leaf.path.setAttribute("d", bendPath(leaf.cmds, leaf.axis, leaf.tip.a));
-    }
+    applyPose(pose);
+  }
 
-    const breathe = Math.sin(t * breatheFreq);
-    const stretch = !atRest(jump) ? clamp(-jump.vy / 12000, -0.05, 0.1) : 0;
-    const sx = (1 - 0.012 * breathe) * (1 + squash.s * 0.5) * (1 - stretch * 0.5) * (1 + (r.bodySx ?? 0));
-    const sy = (1 + 0.024 * breathe) * (1 - squash.s) * (1 + stretch) * (1 + (r.bodySy ?? 0));
+  function applyPose(pose) {
+    bodyPath.setAttribute("d", RIG_BERRY.body);
+
     const { x: gx, y: gy } = RIG_BERRY.ground;
-    const bodyTilt = lookX * 2.2 + (r.bodyRotate ?? 0);
-    const totalY = jump.y + (r.rootY ?? 0);
     bodyGroup.setAttribute(
       "transform",
-      `translate(0 ${totalY}) translate(${gx} ${gy}) rotate(${bodyTilt}) scale(${sx} ${sy}) translate(${-gx} ${-gy})`,
+      `translate(0 ${f(pose.rootY)}) translate(${f(gx)} ${f(gy)}) rotate(${f(pose.bodyRotate)}) scale(${f(pose.bodySx)} ${f(pose.bodySy)}) translate(${f(-gx)} ${f(-gy)})`,
     );
+    if (pose.centerRotate) spinGroup.setAttribute("transform", `rotate(${f(pose.centerRotate)} ${f(RIG_BERRY.center.x)} ${f(RIG_BERRY.center.y)})`);
+    else spinGroup.removeAttribute("transform");
 
-    if (r.centerRotate) {
-      const { x: cx, y: cy } = RIG_BERRY.center;
-      spinGroup.setAttribute("transform", `rotate(${r.centerRotate} ${cx} ${cy})`);
-    } else {
-      spinGroup.removeAttribute("transform");
+    const byRole = { C: pose.leafC, L: pose.leafL, R: pose.leafR };
+    const bendByRole = { C: pose.bendC, L: pose.bendL, R: pose.bendR };
+    for (const leaf of leaves) {
+      leaf.group.setAttribute("transform", `rotate(${f(byRole[leaf.rig.role])} ${f(leaf.rig.pivot.x)} ${f(leaf.rig.pivot.y)})`);
+      leaf.path.setAttribute("d", bendPath(leaf.cmds, leaf.axis, bendByRole[leaf.rig.role]));
     }
 
-    const shut = stepBlink(blink, nowMs, Math.random);
-    const extraSquash = r.eyeSy ?? 0;
-    const lidTop = Math.max(shut, r.lidTop ?? 0);
-    const leftOpen = Math.max(1 - Math.max(lidTop, r.lidBottomLeft ?? 0), 0.04);
-    const rightOpen = Math.max(1 - Math.max(lidTop, r.lidBottomRight ?? 0), 0.04);
-    leftEye.lid.setAttribute("transform", `scale(1 ${leftOpen * (1 + extraSquash)})`);
-    rightEye.lid.setAttribute("transform", `scale(1 ${rightOpen * (1 + extraSquash)})`);
+    const { h: eh } = RIG_BERRY.eyeShape;
+    // `pose.eyeLeft/Right.x/y` are offsets from the rig's base eye anchor, not
+    // absolute coordinates (matching DevBerry's own `olho()` — see cerebro.ts).
+    function applyEye(eye, pos, base) {
+      const liftFraction = clamp(pos.lidTop + pos.lidBottom, 0, 0.96);
+      const visible = Math.max(0.04, 1 - liftFraction);
+      const centerShift = ((pos.lidTop - pos.lidBottom) / 2) * eh * pos.sy;
+      eye.g.setAttribute("transform", `translate(${f(base.x + pos.x)} ${f(base.y + pos.y + centerShift)})`);
+      eye.lid.setAttribute("transform", `rotate(${f(pos.rotate + pos.lidAngle)}) scale(${f(pos.sx)} ${f(pos.sy * visible)})`);
+      const pill = eye.lid.children[0];
+      const arc = eye.lid.children[1];
+      pill.setAttribute("opacity", String(1 - pos.happy));
+      arc.setAttribute("opacity", String(pos.happy));
+    }
+    applyEye(eyeLeft, pose.eyeLeft, RIG_BERRY.eyes.left);
+    applyEye(eyeRight, pose.eyeRight, RIG_BERRY.eyes.right);
 
-    const happyLeft = Math.max(r.happy ?? 0, r.happyLeft ?? 0);
-    const happyRight = Math.max(r.happy ?? 0, r.happyRight ?? 0);
-    leftEye.pill.setAttribute("opacity", String(1 - happyLeft));
-    leftEye.arc.setAttribute("opacity", String(happyLeft));
-    rightEye.pill.setAttribute("opacity", String(1 - happyRight));
-    rightEye.arc.setAttribute("opacity", String(happyRight));
+    shadow.setAttribute("transform", `translate(${f(RIG_BERRY.shadow.x)} ${f(RIG_BERRY.shadow.y)}) scale(${f(pose.shadowScale)}) translate(${f(-RIG_BERRY.shadow.x)} ${f(-RIG_BERRY.shadow.y)})`);
+    shadow.setAttribute("opacity", String(pose.shadowOpacity));
 
-    bodyPath.setAttribute("d", RIG_BERRY.body);
+    accessories.exclaim.setAttribute("opacity", String(pose.exclaim));
+    accessories.question.setAttribute("opacity", String(pose.question));
+    accessories.lamp.setAttribute("opacity", String(pose.lamp));
+    accessories.ellipsis.setAttribute("opacity", String(pose.ellipsis));
+    accessories.zzz.setAttribute("opacity", String(pose.zzz));
   }
 
   let rafId = null;
   return {
+    brain,
+    setMood(weights) { mood = weights; },
+    setActivity(name) { activity = name; },
+    setBend(v) { bend = v; },
+    jump: () => brain.jump(),
+    react: (name) => brain.react(name, performance.now()),
+    tap: () => brain.tap(performance.now()),
     tick,
-    jump: () => launch(jump),
-    react: (name) => reactions.play(name),
     start() {
       const loop = (nowMs) => { tick(nowMs); rafId = requestAnimationFrame(loop); };
       rafId = requestAnimationFrame(loop);
@@ -215,6 +217,10 @@ export function mountBerry(svg, options = {}) {
     stop() {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = null;
+    },
+    destroy() {
+      this.stop();
+      stopObserving();
     },
   };
 }

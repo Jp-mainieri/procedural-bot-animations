@@ -45,4 +45,10 @@ export const RIG_BERRY = {
   ground: { x: 627, y: 960 },
   center: { x: 628, y: 660 },
   shadow: { x: 628, y: 990, rx: 250, ry: 22 },
+  /** Distance from the ground to the base of the leaves (used by the tip-lag physics). */
+  legHeight: 535,
+  /** Idle leaf sway: multiplies amplitude and frequency. */
+  idleLeaf: { amp: 1, freq: 1 },
+  /** 0 = steady body; 1 = flickers like fire (only used by the Chama, not ported here). */
+  flicker: 0,
 };

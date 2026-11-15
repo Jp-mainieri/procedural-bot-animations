@@ -3,67 +3,272 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Berry — faithful port (DevBerry)</title>
+<title>Berry simulator — faithful engine port</title>
 <style>
-  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1b1b1b; --muted: #6b6b6b; --border: #e4e1da; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #15161a; --panel: #1d1f24; --ink: #eceae6; --muted: #9a9a9a; --border: #30323a; }
+  :root {
+    --bg: #111214; --panel: #1a1b1e; --panel2: #202227; --ink: #f2f1ee; --muted: #9a9892;
+    --border: #2d2f34; --accent: #e11d2e;
   }
-  :root[data-theme="dark"] { --bg: #15161a; --panel: #1d1f24; --ink: #eceae6; --muted: #9a9a9a; --border: #30323a; }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 32px 16px 64px;
   }
-  h1 { font-size: 18px; margin: 0; }
-  p.sub { color: var(--muted); margin: 0; text-align: center; max-width: 34em; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header nav { display: flex; gap: 16px; font-size: 13px; }
+  header nav a { color: var(--muted); text-decoration: none; }
+  header nav a:hover { color: var(--ink); }
+  p.sub { color: var(--muted); max-width: 46em; margin: 16px 24px; font-size: 13px; }
+  p.sub code { color: var(--ink); }
+
+  main { display: flex; gap: 24px; padding: 8px 24px 48px; flex-wrap: wrap; align-items: flex-start; }
+  .stage-col { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 340px; flex-shrink: 0; }
   .stage {
-    width: 260px; height: 260px; background: var(--panel); border: 1px solid var(--border);
-    border-radius: 16px; cursor: pointer;
+    width: 320px; height: 320px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 20px; cursor: pointer; touch-action: none;
   }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-  button {
-    font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--ink);
-    border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 13px;
+  .stage-label { color: var(--muted); font-size: 12px; min-height: 1.4em; text-align: center; }
+  .focus-test { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .focus-test input, .focus-test textarea {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--ink);
+    padding: 8px 10px; font: inherit; width: 100%; resize: vertical;
   }
-  button:hover { border-color: #e11d2e; }
-  footer { color: var(--muted); font-size: 12px; text-align: center; max-width: 34em; }
+  .focus-test label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+
+  .panel { flex: 1; min-width: 320px; background: var(--panel); border: 1px solid var(--border); border-radius: 20px; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tabs button {
+    font: inherit; background: none; border: none; color: var(--muted); padding: 14px 18px;
+    cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-size: 13px;
+  }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab-panel { padding: 18px; display: none; flex-direction: column; gap: 14px; }
+  .tab-panel.active { display: flex; }
+  .group h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font: inherit; border: 1px solid var(--border); background: var(--panel2); color: var(--ink);
+    border-radius: 999px; padding: 7px 13px; cursor: pointer; font-size: 13px;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .note { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin: 0; }
+  .log { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); max-height: 160px; overflow-y: auto; border-top: 1px solid var(--border); padding-top: 10px; }
+  .log div:first-child { color: var(--ink); }
+  footer { color: var(--muted); font-size: 12px; text-align: center; max-width: 46em; margin: 0 24px 40px; }
   footer a { color: inherit; }
 </style>
 </head>
 <body>
-  <h1>Berry — faithful engine port</h1>
-  <p class="sub">
-    DevBerry's actual mascot: the exact body + 3 leaves geometry, the exact spring/leaf-bend physics, and three of
-    its real keyframed reactions, from <code>lib/berry/{rig,motor,folhas,reacoes}.ts</code> (branch
-    <code>feat/berry-simulador-mascote</code>), translated to English identifiers but otherwise unchanged. Move your
-    pointer over it; click or tap to jump, or use the buttons below.
-  </p>
-  <svg id="stage" class="stage" viewBox="190 60 880 990"></svg>
-  <div class="controls">
-    <button data-reaction="wink">wink</button>
-    <button data-reaction="flatten">flatten</button>
-    <button data-reaction="somersault">somersault</button>
+<header>
+  <h1>Berry simulator — faithful engine port</h1>
+  <nav>
+    <a href="../states-demo.html">Generic engine demo</a>
+    <a href="https://github.com/Jp-mainieri/procedural-bot-animations/blob/main/skills/procedural-bot-animations/references/berry-case-study.md">Case study</a>
+    <a href="https://github.com/Jp-mainieri/procedural-bot-animations">GitHub</a>
+  </nav>
+</header>
+<p class="sub">
+  DevBerry's actual mascot: exact body + 3-leaf geometry, exact spring/leaf-bend physics, real eye saccade/pursuit
+  physics, weighted moods, loop activities, the hover/click gesture picker, and 20+ keyframed reactions — ported
+  from <code>lib/berry/{rig,motor,folhas,humores,olhar,foco,interacoes,reacoes,cerebro}.ts</code> on branch
+  <code>feat/berry-simulador-mascote</code>. Move your pointer over it, hover, click (click fast a few times), or
+  try the gaze modes and focus test below.
+</p>
+
+<main>
+  <div class="stage-col">
+    <svg id="stage" class="stage" viewBox="190 60 880 990"></svg>
+    <div class="stage-label">reaction: <span id="reaction-name">none</span> &middot; gesture (hover/click): <span id="gesture-name">—</span></div>
+
+    <div class="group chips" id="gaze-mode-chips">
+      <button class="chip" data-mode="pointer" aria-pressed="true">follow pointer</button>
+      <button class="chip" data-mode="free">free-roam</button>
+      <button class="chip" data-mode="focus">focus (anchors)</button>
+    </div>
+
+    <div class="focus-test">
+      <label for="focus-input">Focus-mode test: type here, or click the field</label>
+      <input id="focus-input" type="text" placeholder="Click or type — Berry looks at the cursor" />
+      <textarea id="focus-anchor" rows="2" data-berry-focus="smooth" placeholder="This textarea is a focus anchor (data-berry-focus)"></textarea>
+    </div>
+
+    <div class="log" id="log"></div>
   </div>
-  <footer>
-    This file is a reference demo, not part of the installable <code>procedural-bot-animations</code> package —
-    Berry has a multi-part rig (leaves with their own spring physics), which is a different shape than the
-    single-silhouette avatars that package's generic engine targets. See
-    <a href="https://github.com/Jp-mainieri/procedural-bot-animations/blob/main/skills/procedural-bot-animations/references/berry-case-study.md">berry-case-study.md</a>.
-  </footer>
+
+  <div class="panel">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="mood">Mood</button>
+      <button role="tab" aria-selected="false" data-tab="activity">Activity</button>
+      <button role="tab" aria-selected="false" data-tab="reactions">Reactions</button>
+      <button role="tab" aria-selected="false" data-tab="physics">Physics</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="mood">
+      <div class="group">
+        <h3>Mood (single, blended smoothly)</h3>
+        <div class="chips" id="mood-chips"></div>
+      </div>
+      <p class="note">Each mood is a full-weight pose delta (eyelids, leaf lean, a touch of turn); the brain smooths
+        the weight on every switch, so there's never a hard cut — see <code>berry-moods.js</code>.</p>
+    </div>
+
+    <div class="tab-panel" data-panel="activity">
+      <div class="group">
+        <h3>Activity (looping, single)</h3>
+        <div class="chips" id="activity-chips"></div>
+      </div>
+      <p class="note">Loop activities run as long as they're active, driven by the clock (<code>berry-reactions.js</code>'s
+        <code>ACTIVITIES</code>) rather than a fixed duration. Switching away from "sleeping" wakes Berry up first.</p>
+    </div>
+
+    <div class="tab-panel" data-panel="reactions">
+      <div class="group">
+        <h3>Reactions (one at a time; a new one fades the last out over 250ms)</h3>
+        <div class="chips" id="reaction-chips"></div>
+      </div>
+      <div class="group">
+        <h3>Interactions (try them on the character itself)</h3>
+        <p class="note">Hovering picks a weighted gesture (never repeating the last). Hold the cursor over Berry for
+          2.5s for a cuddle, 9s to nap (click to wake). A single click also picks a gesture; quick clicks chain — the
+          3rd huffs, 5th gets dizzy, 8th hides.</p>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="physics">
+      <div class="group chips">
+        <button class="chip" id="toggle-bend" aria-pressed="true">Leaf tip physics (bend)</button>
+        <button class="chip" id="toggle-reduced" aria-pressed="false">Reduced motion</button>
+      </div>
+      <p class="note">"Reduced motion" stops idle sway, breathing, blinking and gaze wander — only discrete pose
+        changes (mood, reaction) still show, per <code>prefers-reduced-motion</code> best practice.</p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  This file and everything in <code>examples/berry-live/</code> is a reference demo, not part of the installable
+  <code>procedural-bot-animations</code> package — Berry has a multi-part rig (leaves with their own spring
+  physics) and a much richer composition (moods, activities, gesture picker) than that package's generic
+  single-silhouette engine targets. See
+  <a href="https://github.com/Jp-mainieri/procedural-bot-animations/blob/main/skills/procedural-bot-animations/references/berry-case-study.md">berry-case-study.md</a>
+  for exactly what's ported and what isn't (Chama, the object-morph transformations).
+</footer>
 
 <script type="module">
   import { mountBerry } from "./berry-live.js";
+  import { MOOD_NAMES } from "./berry-moods.js";
+  import { REACTION_NAMES, ACTIVITY_NAMES } from "./berry-reactions.js";
 
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const svg = document.getElementById("stage");
-  const berry = mountBerry(svg, { reducedMotion });
-  berry.start();
+  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  for (const button of document.querySelectorAll("button[data-reaction]")) {
-    button.addEventListener("click", () => berry.react(button.dataset.reaction));
+  let berry = null;
+  function mount(gazeMode) {
+    berry?.destroy();
+    svg.replaceChildren();
+    berry = mountBerry(svg, { reducedMotion: toggleReduced.getAttribute("aria-pressed") === "true", gazeMode });
+    berry.start();
   }
+
+  const log = document.getElementById("log");
+  function writeLog(entry) {
+    const row = document.createElement("div");
+    row.textContent = entry;
+    log.prepend(row);
+    while (log.children.length > 40) log.removeChild(log.lastChild);
+  }
+
+  // --- Gaze mode.
+  const gazeButtons = document.querySelectorAll("#gaze-mode-chips .chip");
+  for (const btn of gazeButtons) {
+    btn.addEventListener("click", () => {
+      for (const b of gazeButtons) b.setAttribute("aria-pressed", "false");
+      btn.setAttribute("aria-pressed", "true");
+      mount(btn.dataset.mode);
+      writeLog(`gaze mode → ${btn.dataset.mode}`);
+    });
+  }
+
+  // --- Mood (single select).
+  const moodChips = document.getElementById("mood-chips");
+  let activeMood = "neutral";
+  for (const name of MOOD_NAMES) {
+    const btn = document.createElement("button");
+    btn.className = "chip";
+    btn.textContent = name;
+    btn.setAttribute("aria-pressed", String(name === "neutral"));
+    btn.addEventListener("click", () => {
+      activeMood = name;
+      for (const b of moodChips.children) b.setAttribute("aria-pressed", String(b === btn));
+      berry.setMood(name === "neutral" ? {} : { [name]: 1 });
+      writeLog(`mood → ${name}`);
+    });
+    moodChips.appendChild(btn);
+  }
+
+  // --- Activity (single select, "none" included).
+  const activityChips = document.getElementById("activity-chips");
+  const activityOptions = [{ value: null, label: "none" }, ...ACTIVITY_NAMES.map((a) => ({ value: a, label: a }))];
+  for (const opt of activityOptions) {
+    const btn = document.createElement("button");
+    btn.className = "chip";
+    btn.textContent = opt.label;
+    btn.setAttribute("aria-pressed", String(opt.value === null));
+    btn.addEventListener("click", () => {
+      const wasSleeping = activityChips.querySelector('[aria-pressed="true"]')?.textContent === "sleeping";
+      for (const b of activityChips.children) b.setAttribute("aria-pressed", String(b === btn));
+      if (wasSleeping && opt.value !== "sleeping") berry.react("wake");
+      berry.setActivity(opt.value);
+      writeLog(`activity → ${opt.label}`);
+    });
+    activityChips.appendChild(btn);
+  }
+
+  // --- Reactions.
+  const reactionChips = document.getElementById("reaction-chips");
+  const reactionName = document.getElementById("reaction-name");
+  const gestureName = document.getElementById("gesture-name");
+  for (const name of REACTION_NAMES) {
+    const btn = document.createElement("button");
+    btn.className = "chip";
+    btn.textContent = name;
+    btn.addEventListener("click", () => { berry.react(name); writeLog(`reaction → ${name}`); });
+    reactionChips.appendChild(btn);
+  }
+  setInterval(() => { if (berry) reactionName.textContent = berry.brain.currentReaction ?? "none"; }, 100);
+  svg.addEventListener("pointerenter", () => setTimeout(() => { gestureName.textContent = berry?.brain.pendingGesture ?? berry?.brain.currentReaction ?? "—"; }, 20));
+
+  // --- Physics toggles.
+  const toggleBend = document.getElementById("toggle-bend");
+  const toggleReduced = document.getElementById("toggle-reduced");
+  toggleReduced.setAttribute("aria-pressed", String(prefersReduced));
+  toggleBend.addEventListener("click", () => {
+    const on = toggleBend.getAttribute("aria-pressed") !== "true";
+    toggleBend.setAttribute("aria-pressed", String(on));
+    berry.setBend(on);
+  });
+  toggleReduced.addEventListener("click", () => {
+    const on = toggleReduced.getAttribute("aria-pressed") !== "true";
+    toggleReduced.setAttribute("aria-pressed", String(on));
+    mount(document.querySelector('#gaze-mode-chips [aria-pressed="true"]').dataset.mode);
+  });
+
+  // --- Tabs.
+  const tabs = document.querySelectorAll('[role="tab"]');
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      for (const t of tabs) t.setAttribute("aria-selected", String(t === tab));
+      for (const p of document.querySelectorAll(".tab-panel")) p.classList.toggle("active", p.dataset.panel === tab.dataset.tab);
+    });
+  }
+
+  mount("pointer");
+  writeLog("ready");
 </script>
 </body>
 </html>

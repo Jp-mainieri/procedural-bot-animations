@@ -8,6 +8,14 @@
 
 // ---------- from motor.ts ----------
 
+/**
+ * Formats a number for an SVG attribute. `${v}` alone fails for very small
+ * magnitudes (e.g. a value that's decayed to ~7e-7): `Number#toString`
+ * switches to exponential notation below 1e-6, which SVG's number grammar
+ * rejects — `toFixed` never does.
+ */
+export const fmtNum = (v) => (Number.isFinite(v) ? v.toFixed(4) : "0");
+
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -116,6 +124,38 @@ export function stepJump(p, squash, dt) {
   }
   squash.v += (-320 * squash.s - 15 * squash.v) * dt;
   squash.s += squash.v * dt;
+}
+
+/**
+ * SmoothDamp: eases `m` toward `target` over about `time` seconds, with no
+ * overshoot and a continuous velocity (unlike `damp`) — stable at any `dt`.
+ * `m = { x: value, v: velocity }`, mutated in place.
+ */
+export function smoothDamp(m, target, time, dt) {
+  if (dt <= 0) return m.x;
+  const w = 2 / Math.max(time, 1e-3);
+  const x = w * dt;
+  const e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+  const delta = m.x - target;
+  const temp = (m.v + w * delta) * dt;
+  m.v = (m.v - w * temp) * e;
+  m.x = target + (delta + temp) * e;
+  return m.x;
+}
+
+/**
+ * A peak that holds: jumps to `input` immediately when it rises, and only
+ * starts releasing `holdMs` after the last time it rose, at `releasePerSecond`.
+ * `s = { v: value, until: ms }`, mutated in place.
+ */
+export function stepHold(s, input, now, holdMs, releasePerSecond, dt) {
+  if (input >= s.v) {
+    s.v = input;
+    s.until = now + holdMs;
+  } else if (now > s.until) {
+    s.v = Math.max(input, s.v - releasePerSecond * dt);
+  }
+  return s.v;
 }
 
 // ---------- from folhas.ts ----------

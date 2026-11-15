@@ -1,7 +1,7 @@
 {
   "name": "procedural-bot-animations",
-  "version": "0.1.0",
-  "description": "Procedural motion and a state machine for Open Bot Avatar: idle wander, breathing, spring bounce, velocity lean, and typed bot states.",
+  "version": "0.1.1",
+  "description": "Weighted/blended moods, one-shot reactions, and gaze with saccade/pursuit physics for a silhouette-plus-eyes avatar, plus a typed state machine. Renders its own SVG; Open Bot Avatar is used only as a shape source.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
