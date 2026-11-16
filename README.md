@@ -1,5 +1,7 @@
 # procedural-bot-animations
 
+[![npm version](https://img.shields.io/npm/v/procedural-bot-animations.svg)](https://www.npmjs.com/package/procedural-bot-animations)
+
 ![Three Berry characters animated by an earlier version of this engine](skills/procedural-bot-animations/assets/cover.gif)
 
 A procedural animation engine for 2D SVG mascots and bot avatars. A character is a body outline, two eyes and up to three moving parts. The engine adds one pose per frame on top of that: an idle that never repeats, blended moods, looping activities, one-shot reactions, eyes that look, blink and react, and parts that sway and bend on springs. It renders plain DOM (one SVG, no framework). The part that computes the pose does not touch the DOM, so you can draw it yourself.
@@ -9,6 +11,8 @@ Characters and animations are plain JSON, so you can write them by hand or gener
 The cover image was made with an earlier version of the engine. It shows Berry, one of the two built-in characters.
 
 ## Install
+
+Package page: [npmjs.com/package/procedural-bot-animations](https://www.npmjs.com/package/procedural-bot-animations)
 
 ```bash
 npm install procedural-bot-animations
