@@ -1,15 +1,13 @@
 # Examples
 
-`states-demo.html` is a complete, runnable page: Open Bot Avatar example shapes (used only as JSON input) rendered and driven by this repo's own engine, with a character picker, mood toggles, reaction buttons, a log, and light/dark + `prefers-reduced-motion` support.
+The main demo is the **Studio**, a static site in [`site/`](../site). It is served from GitHub Pages at <https://jp-mainieri.github.io/procedural-bot-animations/>. To run it locally, serve the `site/` folder with any static file server. If the Studio imports the built package, run `npm run build` first.
 
-[`berry-live/`](berry-live) is a separate, faithful port of DevBerry's actual mascot — see its own demo (`berry-live/berry-demo.html`) and [the case study](../skills/procedural-bot-animations/references/berry-case-study.md). It does not use this package's engine; it's standalone.
-
-`states-demo.html` imports Open Bot Avatar from a CDN (`esm.sh`) and this package from the built `../dist`, so:
+[`minimal.html`](minimal.html) is the smallest working page: it imports the built package, mounts Berry, and has three buttons that fire reactions. The character looks at the pointer. ES module imports need `http(s)`, not `file://`, so serve it:
 
 ```bash
 npm install
 npm run build
-npx serve .   # or any static file server — ES module imports need http(s), not file://
+npx serve .   # or any static file server
 ```
 
-Then open `http://localhost:<port>/examples/states-demo.html` or `.../examples/berry-live/berry-demo.html`.
+Then open `http://localhost:<port>/examples/minimal.html`.

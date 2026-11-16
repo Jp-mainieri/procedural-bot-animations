@@ -1,7 +1,7 @@
 {
   "name": "procedural-bot-animations",
-  "version": "0.1.1",
-  "description": "Weighted/blended moods, one-shot reactions, and gaze with saccade/pursuit physics for a silhouette-plus-eyes avatar, plus a typed state machine. Renders its own SVG; Open Bot Avatar is used only as a shape source.",
+  "version": "0.2.0",
+  "description": "A procedural animation engine for 2D SVG mascots: lively eyes (saccades, pursuit, blinks, eyelids), blended moods, reactions and activities, sprung and bending parts. Characters and animations are plain JSON. Includes a state machine and a scroll traveler.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "site": "npm run build && rm -rf site/dist site/docs && cp -r dist site/dist && mkdir -p site/docs && cp docs/character-format.md docs/animation-format.md site/docs/",
     "check": "npm run typecheck && npm run test && npm run build"
   },
   "keywords": [
@@ -30,7 +31,10 @@
     "mascot",
     "procedural-animation",
     "state-machine",
-    "open-bot-avatar"
+    "open-bot-avatar",
+    "svg",
+    "character-animation",
+    "eyes"
   ],
   "license": "MIT",
   "author": "Jp-mainieri",
@@ -39,14 +43,6 @@
     "url": "https://github.com/Jp-mainieri/procedural-bot-animations.git"
   },
   "homepage": "https://github.com/Jp-mainieri/procedural-bot-animations",
-  "peerDependencies": {
-    "open-bot-avatar": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "open-bot-avatar": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
