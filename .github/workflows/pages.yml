@@ -1,4 +1,4 @@
-name: Deploy demo to GitHub Pages
+name: Deploy Studio to GitHub Pages
 
 on:
   push:
@@ -6,8 +6,7 @@ on:
     paths:
       - "src/**"
       - "site/**"
-      - "examples/berry-live/**"
-      - "skills/procedural-bot-animations/assets/cover.gif"
+      - "docs/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/pages.yml"
@@ -32,19 +31,11 @@ jobs:
           node-version: 22.x
           cache: npm
       - run: npm ci
-      - run: npm run build
-      - name: Assemble pages artifact
-        run: |
-          mkdir -p pages-dist/berry-live
-          cp -r site/. pages-dist/
-          cp -r dist pages-dist/dist
-          cp examples/berry-live/*.js pages-dist/berry-live/
-          cp examples/berry-live/berry-demo.html pages-dist/berry-live/index.html
-          cp skills/procedural-bot-animations/assets/cover.gif pages-dist/cover.gif
+      - run: npm run site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: pages-dist
+          path: site
 
   deploy:
     needs: build

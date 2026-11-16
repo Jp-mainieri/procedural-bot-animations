@@ -1,4 +1,4 @@
-import { clamp, smooth } from "./spring.js";
+import { clamp, smooth } from "./motion.js";
 
 export interface Slot {
   name: string;

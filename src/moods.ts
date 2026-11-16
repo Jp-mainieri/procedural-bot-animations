@@ -1,110 +1,57 @@
-import { clamp, lerp } from "./spring.js";
-import type { PoseDelta } from "./types.js";
+import type { PartialDelta } from "./delta.js";
 
 /**
- * One mood's fully-applied (weight = 1) look. Scale-like fields are lerped
- * from neutral (1 or 0) by the mood's weight and then multiplied across
- * active moods, so e.g. `curious` and `sleepy` can be mixed instead of one
- * replacing the other outright — the thing Open Bot Avatar's three-string
- * `mood` can't do.
+ * Moods are continuous and blend by weight (0 to 1). Each one describes the
+ * pose at weight 1; the brain smooths the weights, so switching moods is never
+ * a hard cut. The expression comes mostly from the eyelids, not the eye size.
  */
-export interface MoodDefinition {
-  eyeScaleX?: number;
-  eyeScaleY?: number;
-  eyeOffsetY?: number;
-  eyeRotate?: number;
-  eyeArcAmount?: number;
-  eyeShut?: number;
-  bodyY?: number;
-  bodyScaleY?: number;
-  bodyRotate?: number;
-}
-
-/** A starting set covering most app states; add your own with the same shape. */
-export const builtinMoods: Record<string, MoodDefinition> = {
+export const MOODS = {
   neutral: {},
-  curious: { eyeScaleY: 1.06, eyeOffsetY: -0.3, bodyRotate: 1.5 },
-  focused: { eyeScaleY: 0.9, bodyScaleY: 0.99 },
-  suspicious: { eyeScaleY: 0.58, eyeRotate: -8, bodyY: 0.6 },
-  sleepy: { eyeScaleY: 0.5, eyeShut: 0.3, bodyY: 1.2 },
-  proud: { eyeArcAmount: 1, bodyScaleY: 1.03 },
-  sad: { eyeScaleY: 0.8, eyeOffsetY: 1, bodyY: 2 },
-};
+  curious: { eyeSy: 0.1, eyeSx: 0.08, partC: 9, bodyRotate: 4, partL: 4, partR: -4, turn: 0.25 },
+  focused: { lidTop: 0.22, lidAngle: 6, partAmp: -0.6, bodySy: -0.01 },
+  suspicious: {
+    lidTop: 0.42,
+    lidBottom: 0.12,
+    lidAngle: 18,
+    partL: -12,
+    partR: 12,
+    bodyRotate: -3,
+    turn: -0.3,
+  },
+  sleepy: {
+    lidTop: 0.58,
+    lidAngle: -6,
+    eyeY: 10,
+    partL: -10,
+    partR: 10,
+    partC: -6,
+    rootY: 6,
+    partAmp: -0.5,
+  },
+  proud: { happy: 1, partL: 12, partR: -12, bodySy: 0.03, eyeY: -6 },
+  downcast: {
+    lidTop: 0.28,
+    lidAngle: -16,
+    eyeY: 16,
+    eyeSx: -0.06,
+    partL: -18,
+    partR: 18,
+    partC: 10,
+    rootY: 10,
+    bodySy: -0.04,
+    partAmp: -0.6,
+  },
+  angry: { lidTop: 0.34, lidAngle: 26, eyeSy: -0.05, partL: -6, partR: 6, bodySy: 0.02 },
+  smiling: { lidBottom: 0.3, eyeSy: 0.04, partL: 6, partR: -6 },
+} satisfies Record<string, PartialDelta>;
 
-export type MoodWeights = Record<string, number>;
+export type Mood = keyof typeof MOODS;
+export const MOOD_NAMES = Object.keys(MOODS) as Mood[];
 
-/**
- * Blends any number of simultaneously-active moods, each 0..1, into one
- * pose delta. Unlisted moods (weight 0 or absent) contribute nothing.
- */
-export function blendMoods(weights: MoodWeights, moods: Record<string, MoodDefinition> = builtinMoods): PoseDelta {
-  let eyeScaleX = 1;
-  let eyeScaleY = 1;
-  let eyeOffsetY = 0;
-  let eyeRotate = 0;
-  let eyeArcAmount = 0;
-  let eyeShut = 0;
-  let bodyY = 0;
-  let bodyScaleY = 1;
-  let bodyRotate = 0;
+export type MoodWeights = Partial<Record<Mood, number>>;
 
-  for (const [name, rawWeight] of Object.entries(weights)) {
-    const weight = clamp(rawWeight, 0, 1);
-    if (weight <= 0) continue;
-    const mood = moods[name];
-    if (!mood) continue;
-
-    eyeScaleX *= lerp(1, mood.eyeScaleX ?? 1, weight);
-    eyeScaleY *= lerp(1, mood.eyeScaleY ?? 1, weight);
-    eyeOffsetY += (mood.eyeOffsetY ?? 0) * weight;
-    eyeRotate += (mood.eyeRotate ?? 0) * weight;
-    eyeArcAmount = Math.max(eyeArcAmount, (mood.eyeArcAmount ?? 0) * weight);
-    eyeShut = Math.max(eyeShut, (mood.eyeShut ?? 0) * weight);
-    bodyY += (mood.bodyY ?? 0) * weight;
-    bodyScaleY *= lerp(1, mood.bodyScaleY ?? 1, weight);
-    bodyRotate += (mood.bodyRotate ?? 0) * weight;
-  }
-
-  return {
-    eyes: { scaleX: eyeScaleX, scaleY: eyeScaleY, offsetY: eyeOffsetY, rotate: eyeRotate, arcAmount: eyeArcAmount, shut: eyeShut },
-    body: { y: bodyY, scaleY: bodyScaleY, rotate: bodyRotate },
-  };
-}
-
-export interface MoodBlenderOptions {
-  /** How fast each mood's weight eases toward its target, 1/seconds. Default 5 (matches DevBerry's calibration). */
-  rate?: number;
-}
-
-/**
- * Smooths mood weights over time instead of snapping them, so switching
- * which moods are "on" doesn't pop. Set target weights with `set`, read the
- * current smoothed blend with `update`.
- */
-export class MoodBlender {
-  private current: MoodWeights = {};
-  private target: MoodWeights = {};
-  private readonly rate: number;
-  private readonly moods: Record<string, MoodDefinition>;
-
-  constructor(options: MoodBlenderOptions & { moods?: Record<string, MoodDefinition> } = {}) {
-    this.rate = options.rate ?? 5;
-    this.moods = options.moods ?? builtinMoods;
-  }
-
-  /** Sets (or clears, at weight 0 / omission) target weights for the named moods. Others are left as they are. */
-  set(weights: MoodWeights): void {
-    Object.assign(this.target, weights);
-  }
-
-  update(dt: number): PoseDelta {
-    const names = new Set([...Object.keys(this.current), ...Object.keys(this.target)]);
-    for (const name of names) {
-      const cur = this.current[name] ?? 0;
-      const target = this.target[name] ?? 0;
-      const next = lerp(cur, target, 1 - Math.exp(-this.rate * dt));
-      this.current[name] = Math.abs(next) < 1e-4 && target === 0 ? 0 : next;
-    }
-    return blendMoods(this.current, this.moods);
-  }
+/** Accepts a name (`'curious'`) or a blend (`{ curious: 0.5, focused: 0.5 }`). */
+export function normalizeMood(h: Mood | MoodWeights | undefined): MoodWeights {
+  if (!h) return { neutral: 1 };
+  return typeof h === "string" ? { [h]: 1 } : h;
 }

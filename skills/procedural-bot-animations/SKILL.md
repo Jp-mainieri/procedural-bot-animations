@@ -1,55 +1,114 @@
 ---
 name: procedural-bot-animations
-description: Render and animate a silhouette-plus-eyes avatar (the shape format from Open Bot Avatar, https://github.com/DominikScholz/open-bot-avatar) with this repo's own procedural engine — weighted/blended moods, one-shot reaction timelines (bounce, fright, nod, double-blink), gaze with saccade/pursuit/microsaccade physics and a fake-3D turn, plus a typed state machine for app events. Open Bot Avatar is used only to *model* the shape (its editor or `generate-avatar` skill); this skill never calls its renderer or runtime. Not for designing the silhouette itself, and not for multi-part rigs with real limbs (see `references/berry-case-study.md` for why and what that needs instead).
+description: Mounts and animates a 2D SVG mascot or bot avatar with the procedural-bot-animations engine (lively eyes, blended moods, reactions, activities, sprung parts), wires app events to it, and generates character JSON and animation JSON files for this engine from a text description. Use when the user asks to animate or mount a mascot, bot avatar or character with eyes, to tie an assistant's states (thinking, success, error) to an avatar, or to create, validate or fix a character or animation for this engine.
 metadata:
-  short-description: Procedural moods/reactions/gaze engine for a silhouette+eyes avatar
+  short-description: Mount, wire and generate characters and animations for the procedural-bot-animations engine
 ---
 
 # Procedural bot animations
 
-![Three Berry characters, each with a different personality, animated by this engine](assets/cover.gif)
+![Three Berry characters animated by an earlier version of this engine](assets/cover.gif)
 
-A silhouette-plus-eyes definition (`{ body: { path }, eyes: { x, y, spacing, scale } }` — Open Bot Avatar's JSON format) is just data: a shape with nowhere to put a mood, a reaction, or a gaze. This skill is the engine that reads that data, renders it as its own SVG (so moods and reactions can actually deform the eyes and body), and drives it over time from real app events.
+An engine that animates a 2D SVG character: a body outline, two eyes and up to three moving parts. It computes one pose per frame from an idle that never repeats, blended moods, looping activities and one-shot reactions, and writes it to plain SVG. Characters and animations are plain JSON.
 
-Two layers, used together, and only the first comes from Open Bot Avatar:
+Three jobs, each with its own reference:
 
-1. **The shape** — model it in [the editor](https://dominikscholz.github.io/open-bot-avatar/), with its `generate-avatar` skill, or by hand against [its contract](https://github.com/DominikScholz/open-bot-avatar/blob/main/docs/avatar-contract.md). This skill does not design silhouettes, and never imports `open-bot-avatar`'s own renderer (`mountAvatar`, `update()`) — only its JSON shape.
-2. **The life** — this skill's engine (`src/`): render the shape yourself, blend moods, play reactions, drive gaze, and tie a state machine's events to all three.
+| Job | Read |
+|---|---|
+| Mount a character and drive it from app events | This file, then [`references/state-machine-guide.md`](references/state-machine-guide.md) |
+| Generate a character as JSON | [`references/generate-character.md`](references/generate-character.md) |
+| Generate an animation as JSON | [`references/generate-animation.md`](references/generate-animation.md) |
 
-## Workflow
+Also: [`references/motion-cookbook.md`](references/motion-cookbook.md) (calibrated numbers) and [`references/built-in-characters.md`](references/built-in-characters.md) (Berry and Flame).
 
-1. **Confirm what exists already.** Ask only what's missing, in one message:
-   - Is there a definition yet? If not, point at Open Bot Avatar's editor or `generate-avatar` skill — don't invent a silhouette here.
-   - Does the character have separate moving parts (limbs, ears, a tail)? If so, say so up front: this engine's `src/` only handles a single silhouette. Read `references/berry-case-study.md` and follow its pattern (per-part base spring + tip spring + path-bend) instead of forcing a multi-part character through `src/`.
-   - What app events should drive state (e.g. "loading" while a request is in flight, "success"/"error" on its result)? If unspecified, default to the common set below.
-2. **Render it** with `mountRig` (`src/render.ts`) — mounts the definition as the engine's own SVG (one body path, two independently-posable eye groups), not Open Bot Avatar's renderer.
-3. **Design the state machine** using `createStateMachine` (`src/state-machine.ts`) — see `references/state-machine-guide.md` for common states, timers and interrupt rules.
-4. **Wire the engine** with `bindBrain` (`src/bind.ts`), which every frame runs a `Brain` (`src/brain.ts`: mood blending + gaze + fake-3D turn + blink + breathing + the active reaction) and applies the resulting `Pose` to the rig. In each state's handler, call `brain.setMood({...})` and/or `brain.react("bounce")`. Calibrated values and recipes: `references/motion-cookbook.md`.
-5. **Scroll-traveling bot?** Use `travelerFrame`/`findActiveSlot` from `src/scroll-traveler.ts`. DOM-free; you read `.slot` elements' rects yourself and hand it numbers.
-6. **Demo as a working page.** `examples/states-demo.html` is a complete, runnable reference (character picker, mood toggles, reaction buttons, a log, light/dark, `prefers-reduced-motion`). Reuse its structure rather than starting from a blank page.
+## Get the package
 
-## Common bot states
+In a project: `npm install procedural-bot-animations`. In a checkout of the repo: `npm install && npm run build`, then import from `dist/index.js`. The package is ESM only. Do not install or import `open-bot-avatar`; the engine only reads the shape of its JSON.
 
-`idle`, `thinking`, `success`, `error`, `loading`, `sleeping` cover most apps. Add custom ones freely — `createStateMachine` is generic over any string union. Rules of thumb:
-- `error` should be hard to interrupt accidentally (`interruptibleBy: ["idle"]`) so a user action doesn't visually cancel an error before they've read it.
-- `success`/short acknowledgement states should auto-return to `idle` via `after: { ms, to: "idle" }`, not wait for an explicit event.
-- Map a state to a mood weight map (`brain.setMood({...})`) plus, where it's a one-off like "success", a reaction (`brain.react("bounce")`) — moods persist while the state is active, reactions play once.
+## Workflow: mount and wire
+
+1. **Ask only what is missing**, in one message:
+   - Which character: Berry or Flame (built in), or a custom one? For a custom one, use the character reference below and do not invent a silhouette without being asked.
+   - Which app events should drive it (a request in flight, a success, an error)? If unspecified, use the table below.
+2. **Mount it.**
+
+   ```ts
+   import { mountCharacter, RIG_BERRY } from "procedural-bot-animations";
+
+   const bot = mountCharacter(host, {
+     rig: RIG_BERRY,        // or parseCharacter(json).value.rig
+     size: 200,             // px wide; omit to fill the host
+     color: "#e11d2e",
+     label: "Assistant",    // gives the SVG role="img"; without it the SVG is aria-hidden
+   });
+   ```
+
+3. **Wire events** with `bot.update({ mood, activity })` and `bot.react(name)`.
+   - `mood` is a name or a weight map. It replaces the previous mood.
+   - `activity` is a name or `null`. It loops while set.
+   - `react(name)` plays once and returns `false` for an unknown name.
+4. **If there are several states**, design a state machine ([`references/state-machine-guide.md`](references/state-machine-guide.md)).
+5. **Clean up** with `bot.destroy()` when the host is removed.
+
+### What exists out of the box
+
+| Kind | Names |
+|---|---|
+| Moods (`MOODS`) | `neutral`, `curious`, `focused`, `suspicious`, `sleepy`, `proud`, `downcast`, `angry`, `smiling` |
+| Activities (`ACTIVITIES`) | `thinking`, `loading`, `sleeping`, `flickering`, `out` |
+| Reactions (`REACTIONS`) | 36. Common: `success`, `successExercise`, `successModule`, `almostThere`, `fright`, `idea`, `confused`, `dizzy`, `wink`, `cheerful`, `somersault`, `welcome`, `copiedThat`, `wake`. Transformations: `morphLoading`, `morphCheck`, `morphCode`, `energy` (these cannot be interrupted). Flame effects: `ignite`, `extinguish`, `blaze`, `crackle`, `sneeze`, `tierUp`, `warmUp`, `heatUp`, `burst` |
+
+Run `Object.keys(REACTIONS)` for the full list. A sensible default mapping:
+
+| App event | Call |
+|---|---|
+| Waiting for a response | `update({ mood: "focused", activity: "thinking" })` |
+| Request in flight (a spinner) | `update({ activity: "loading" })` |
+| Success | `update({ mood: "proud", activity: null })` and `react("success")` |
+| Error | `update({ mood: "downcast", activity: null })` and `react("confused")` |
+| Idle for a long time | `update({ mood: "sleepy" })`, or `update({ activity: "sleeping" })` |
+| Something needs attention | `react("idea")` or `react("fright")` |
+
+### Options worth knowing
+
+| Option | Meaning |
+|---|---|
+| `gaze` | `"pointer"` (default), `"free"` (wanders the page), `"focus"` (looks at what matters: focused fields, typing, clicks, scroll, elements with `data-bot-focus`), a `{ x, y }` in window px, a function returning one, or `null` |
+| `interactive` | `false` turns off hover and click reactions. Default `true` |
+| `reducedMotion` | `"auto"` (default, follows the system), `true`, `false` |
+| `eyeStyle` | `"classic"` (default), `"pumpy"` or `"big"` |
+| `library` | A `Library` with custom reactions, activities and moods. See the animation reference |
+| `bend` | `false` turns off the physics bend of the parts |
+| `appendages` | A list of roles (`"C"`, `"L"`, `"R"`) to draw. Default: all |
+| `onEvent` | Called with `{ type: "hover" | "click", name }` when a gesture is drawn |
+
+`bot.update({...})` accepts the same options later. It rebuilds the SVG only when it must. `bot.brain` is the `Brain`, if you need `jump()` or `react(name, now)` directly.
+
+## Workflow: generate a character
+
+Follow [`references/generate-character.md`](references/generate-character.md). In short: write the JSON in a 0..100 box, then **validate it with `parseCharacter` through a one-off node script**, fix every error and validate again. Do not hand over a character that was not validated, unless the package could not be run, and then say so.
+
+## Workflow: generate an animation
+
+Follow [`references/generate-animation.md`](references/generate-animation.md). In short: pick a kind (`reaction`, `activity` or `mood`), write keyframe tracks over delta fields, **validate with `parseAnimation`**, fix every error, and read the `describeAnimation` sentence back. Play it with `createLibrary()`, `addToLibrary(library, result.value.compiled)` and `mountCharacter({ library })`.
 
 ## Quality checklist
 
-- `prefers-reduced-motion`: stop idle wander, breathing and blinking; keep only the discrete mood/pose change.
-- Works in light and dark (pass an explicit `color`; don't hardcode one that disappears on either background).
-- Frame deltas are already capped inside `bindBrain` (`safeDt`) so a backgrounded tab doesn't make springs explode on return.
-- No dependency beyond this package for rendering — `open-bot-avatar` (optional) is only a source of JSON shapes, never a runtime dependency of `src/`.
+- Reduced motion is on by default (`"auto"`). Test it with `reducedMotion: true`: only expression changes should remain.
+- Pass a `color` that shows on both light and dark backgrounds, or switch it with the theme.
+- Give the character a `label` when it carries meaning. Leave it out when it is decoration.
+- The SVG is not focusable. Put real actions on real buttons.
+- A custom character with an `id` other than `berry` or `flame` uses Berry's hover and click gestures.
+- Do not add your own periodic motion on top of the gaze. See the cookbook.
 
 ## Reference material
 
-- `references/motion-cookbook.md` — calibrated values (breathing rate, gaze damp rate, wander timing, mood/reaction parameters) and personality-to-parameter tuning.
-- `references/state-machine-guide.md` — how to design states/transitions/timers/interrupts for a bot, with worked examples.
-- `references/berry-case-study.md` — **read this before animating any character with separate moving parts.** A faithful, working port of DevBerry's actual mascot (`examples/berry-live/`), showing what a multi-part rig needs that this engine's single-silhouette `src/` doesn't attempt.
-- `examples/states-demo.html` — interactive demo of the generic engine (Open Bot Avatar example shapes).
-- `examples/berry-live/berry-demo.html` — interactive demo of the Berry port.
-- [Open Bot Avatar docs](https://dominikscholz.github.io/open-bot-avatar/#/docs) and [avatar contract](https://github.com/DominikScholz/open-bot-avatar/blob/main/docs/avatar-contract.md) — the shape side, referenced but not duplicated here.
+- [`references/motion-cookbook.md`](references/motion-cookbook.md): blink, saccade, spring, hold and hover numbers, built-in mood values, reaction magnitudes.
+- [`references/state-machine-guide.md`](references/state-machine-guide.md): states, transitions, timers and interrupts, wired to a mounted character.
+- [`references/generate-character.md`](references/generate-character.md): the character contract and a validate-and-fix loop.
+- [`references/generate-animation.md`](references/generate-animation.md): the animation contract, animation craft and a validate-and-fix loop.
+- [`references/built-in-characters.md`](references/built-in-characters.md): Berry and Flame.
+- Repo docs: `docs/architecture.md`, `docs/character-format.md`, `docs/animation-format.md`. The Studio is at <https://jp-mainieri.github.io/procedural-bot-animations/>.
 
 ## Install for other sessions
 
